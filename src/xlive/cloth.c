@@ -10,7 +10,7 @@
  * only does its per-frame bookkeeping), and a frame that crosses a step boundary sees exactly
  * k * step. The cloth is then simulated exactly as at its native rate, whatever the frame rate.
  *
- * [Display] ClothRate = steps per second (default 30, 0 = leave the game's behaviour alone).
+ * [Display] ClothRate = steps per second (default 0 = the game's own behaviour; 30 or 60 = fixed steps).
  * File VAs: tick 0x19C9060 (__fastcall, ECX = manager), its only call 0x19D62A9,
  * now = double 0x2075CE0, last = double 0x2075D00, scale = float 0x20B74E4. */
 #include "xl.h"
@@ -44,7 +44,7 @@ static void __fastcall cloth_tick(void *mgr)
 
 void xl_cloth_attach(void)
 {
-    int rate = xl_cfg_int("Display", "ClothRate", 30);
+    int rate = xl_cfg_int("Display", "ClothRate", 0);
     if (rate <= 0) { xl_log("cloth: game's own timing (ClothRate=0)"); return; }
     g_base = (BYTE *)GetModuleHandleW(NULL);
     DWORD delta = (DWORD)(ULONG_PTR)g_base - 0x400000;
