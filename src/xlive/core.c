@@ -260,6 +260,8 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD reason, LPVOID reserved)
         xl_d3dfix_attach();
         extern void xl_secu_attach(void);
         xl_secu_attach();
+        extern void xl_cloth_attach(void);
+        xl_cloth_attach();
         extern void xl_test_attach(void);
         xl_test_attach();
     }

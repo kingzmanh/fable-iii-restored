@@ -51,3 +51,6 @@ Seven pass/fail pairs, `0x1C86C18 … 0x1C86C4C` (A, B). A check passes when A =
 - With VSync off, the game creates its device windowed with `PresentationInterval = IMMEDIATE`.
 - `CreateDevice` returns `D3DERR_DEVICELOST` while another program holds exclusive fullscreen. The game then shows "Direct3D failed to initialise" and crashes at `0x18D031E`; `d3dfix.c` retries instead.
 - `Fable3.exe` is already large-address-aware.
+
+## Cloth / hair at high frame rates
+`FUN_019c9060` (NEngine cloth manager tick, called once per frame from `0x19D62A9`) computes `elapsed = (now[0x2075CE0] - last[0x2075D00]) * scale[0x20B74E4]`, clamps it to 0.2 s, takes `n = round(elapsed*20 + 0.5)` substeps and steps every cloth with `dt = elapsed/n` (`FUN_019c8f60` -> `FUN_019c8bb0` -> solver). So it is one step per frame with the frame's dt: 1/30 s on console, tiny uneven steps at 100+ fps, and the hair/feathers jitter. `cloth.c` reroutes that call through an accumulator that hands the engine whole 1/30 s steps (0 elapsed on frames in between, which the engine already treats as "no step").

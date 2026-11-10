@@ -10,6 +10,7 @@ Makes the PC version of **Fable III** (Steam, 2011) run again on Windows 10 and 
 - **Saves that don't break.** Saves and in-game settings (controls, audio, misc) are kept as normal files, not tied to a LIVE profile.
 - **Online co-op without Microsoft.** Host or join by IP, or find a host on your LAN. (New: not yet tested between two PCs.)
 - **Display fixes.** Borderless window at your desktop resolution (including ultrawide), the Nvidia VSync/triple-buffering FPS fix, an optional frame cap, and no "Direct3D failed to initialise" crash when another program holds the screen.
+- **Smooth hair and cloth at any frame rate.** The engine stepped hair and cloth physics once per frame, tuned for 30 fps; above that they shook. They now run in fixed 1/30 s steps while the game renders at full speed.
 
 You need your own copy of Fable III (Steam). No game files are included.
 
