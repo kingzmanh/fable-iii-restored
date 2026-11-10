@@ -94,7 +94,7 @@ void    XAPI XLiveUninitialize(void) { xl_log("XLiveUninitialize"); xl_test_exit
 HRESULT XAPI XLiveOnCreateDevice(void *pDevice, void *pPresentParams) { (void)pPresentParams; xl_log("XLiveOnCreateDevice"); xl_test_on_device(pDevice); return S_OK; }
 HRESULT XAPI XLiveOnDestroyDevice(void) { return S_OK; }
 HRESULT XAPI XLiveOnResetDevice(void *pPresentParams) { (void)pPresentParams; return S_OK; }
-/* Frame limiter ([Display] FPSLimit, default 60, 0 = off). The game calls XLiveRender right
+/* Frame limiter ([Display] FPSLimit, default 0 = off). The game calls XLiveRender right
  * before every Present, so waiting here paces the frames. The cloth/hair physics jitter at
  * very high frame rates. Sleep for most of the wait (1 ms timer resolution), spin the rest. */
 static void frame_limit(void)
@@ -102,7 +102,7 @@ static void frame_limit(void)
     static int limit = -1;
     static LARGE_INTEGER freq, next;
     if (limit < 0) {
-        limit = xl_cfg_int("Display", "FPSLimit", 60);
+        limit = xl_cfg_int("Display", "FPSLimit", 0);
         QueryPerformanceFrequency(&freq);
         timeBeginPeriod(1);
         xl_log("frame limit: %d fps", limit);
