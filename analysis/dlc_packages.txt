@@ -1,0 +1,20 @@
+0000 0xB7D5FE3D720F347CE446785C3F55488C8E7FF201 Fable III PC DLC1
+   FableIII_DayOne_FreeForAll               premium=0        install=0      req=True  Bloostone Budgeon Hammer, Gusket's Musket Rifle
+   FableIII_DayOne_ScotMaleHeroOutfit       premium=8192     install=0      req=False Scot Male Hero Outfit
+   FableIII_DayOne_ScotFemaleHeroOutfit     premium=16384    install=0      req=False Scot Female Hero Outfit
+   FableIII_DayOne_HighlanderTattooSet      premium=32768    install=0      req=False tattoo
+   FableIII_DayOne_RedSetterDogSkin         premium=65536    install=0      req=False Red Setter Dog Skin
+   FableIII_DayOne_UnderstoneQuestPack      premium=32       install=0      req=False Understone Quest Pack
+   FableIII_DayOne_DogSuit                  premium=64       install=0      req=False Dog Suit
+   FableIII_DayOne_ReaverIndustrialArmor    premium=128      install=0      req=False Reaver Industrial Armor
+   FableIII_DayOne_DyePack                  premium=256      install=0      req=False Dye pack
+   FableIII_DayOne_HairPack                 premium=512      install=0      req=False Exclusive hair pack
+   FableIII_DayOne_Potions                  premium=1024     install=0      req=False 5 Star Dog Potion
+   FableIII_Free_Yule_Hat                   premium=2048     install=0      req=False hat
+   FableIII_DogBreeds_Paid                  premium=4096     install=0      req=False dog
+000e 0xD7FCB87DC6790538CC5EE45EC44EC782603B8ACB Fable III Traitors Keep PC DLC
+   FableIII_DLC2_Free                       premium=0        install=0      req=True  dlc2
+   FableIII_DLC2_Paid                       premium=1        install=0      req=True  dlc2
+0010 0x60340833BA99AD081835DF2F3EF01F3F247D0DC3 Fable III PC DLC3
+   FableIII_DayOne_Armoury_Tattoos_Pack     premium=1        install=0      req=False tattoo,weapon
+   FableIII_DayOne_Inquisitor_Pack          premium=2        install=0      req=False tattoo,weapon

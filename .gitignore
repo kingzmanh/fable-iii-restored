@@ -1,0 +1,6 @@
+# build output and local test data
+build/
+work/
+*.log
+# decompiled game code is never published
+analysis/decomp/
