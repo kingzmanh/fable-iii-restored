@@ -421,7 +421,7 @@ static void write_default_ini(void)
           "; auto = your desktop resolution, or e.g. 3440x1440, or game = keep the in-game choice\nResolution=auto\n"
           "; 1 = vsync at the full refresh rate (the game's own vsync halves it)\nVSync=1\n"
           "; frame rate cap (0 = none)\nFPSLimit=0\n"
-          "; hair and cloth physics steps per second (30 = how the game was tuned, 0 = old per-frame behaviour)\nClothRate=30\n\n"
+          "; optional fixed hair and cloth physics steps per second (0 = game default, e.g. 30 or 60)\nClothRate=0\n\n"
           "[Game]\nSkipIntro=1\n\n"
           "[Network]\n; UDP port the game uses for co-op (both players use the same)\nPort=3074\n\n"
           "[Coop]\nJoinIP=\nLastJoinIP=\nHost=0\n\n"
