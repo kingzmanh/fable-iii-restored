@@ -422,7 +422,8 @@ static void write_default_ini(void)
           "; 1 = vsync at the full refresh rate (the game's own vsync halves it)\nVSync=1\n"
           "; frame rate cap (0 = none)\nFPSLimit=0\n"
           "; optional fixed hair and cloth physics steps per second (0 = game default, e.g. 30 or 60)\nClothRate=0\n\n"
-          "[Game]\nSkipIntro=1\n\n"
+          "[Game]\n; skip the Microsoft and Lionhead logo videos\nSkipIntro=1\n"
+          "; 1 = keep the world model/texture banks in memory (for hard drives; slow first load)\nPreloadGlobals=0\n\n"
           "[Network]\n; UDP port the game uses for co-op (both players use the same)\nPort=3074\n\n"
           "[Coop]\nJoinIP=\nLastJoinIP=\nHost=0\n\n"
           "[Debug]\nLog=1\nCrashLog=1\n", f);
@@ -528,6 +529,9 @@ static int uninstall(void)
     DeleteFileW(p);
     if (file_exists(q)) MoveFileW(q, p);
     swprintf(p, MAX_PATH, L"%ls\\Fable3Restored.log", g_dir); DeleteFileW(p);
+    swprintf(p, MAX_PATH, L"%ls\\data\\startup.vfsconfig", g_dir);           /* undo PreloadGlobals */
+    swprintf(q, MAX_PATH, L"%ls\\data\\startup.vfsconfig.before-restored", g_dir);
+    if (file_exists(q)) { DeleteFileW(p); MoveFileW(q, p); }
     wchar_t dlc[MAX_PATH];
     swprintf(dlc, MAX_PATH, L"%ls\\DLC", g_dir);
     if (dir_exists(dlc) && !g_quiet_uninstall && MessageBoxW(NULL, L"Also delete the downloaded DLC (about 2 GB)?\n\nKeep it if you plan to install Fable III Restored again.",

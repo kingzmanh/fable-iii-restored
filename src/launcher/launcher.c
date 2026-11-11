@@ -102,10 +102,55 @@ static void apply_video_options(void)
     if (f) { fwrite(xml, 1, strlen(xml), f); fclose(f); }
 }
 
+/* ---------------- optional: keep the global model/texture banks in memory ----------------
+ * data\startup.vfsconfig mounts globals_models.bnk and globals_textures.bnk (1.8 GB) as
+ * streamed banks. With [Game] PreloadGlobals=1 they get Mode="memory": the game reads them
+ * fully at start-up (long first load) and streams less while playing. 0 puts it back. */
+static void replace_all(char *buf, size_t cap, const char *from, const char *to)
+{
+    size_t fl = strlen(from), tl = strlen(to);
+    char *p = buf;
+    while ((p = strstr(p, from))) {
+        size_t tail = strlen(p + fl);
+        if ((size_t)(p - buf) + tl + tail + 1 > cap) return;
+        memmove(p + tl, p + fl, tail + 1);
+        memcpy(p, to, tl);
+        p += tl;
+    }
+}
+
+static void apply_preload(void)
+{
+    int on = ini_int(L"Game", L"PreloadGlobals", 0);
+    wchar_t path[MAX_PATH], bak[MAX_PATH];
+    swprintf(path, MAX_PATH, L"%ls\\data\\startup.vfsconfig", g_dir);
+    swprintf(bak, MAX_PATH, L"%ls\\data\\startup.vfsconfig.before-restored", g_dir);
+    static char buf[65536], before[65536];
+    FILE *f = _wfopen(path, L"rb");
+    if (!f) return;
+    size_t n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = 0;
+    static const char *banks[] = { "globals/globals_models.bnk\"", "globals/globals_textures.bnk\"" };
+    memcpy(before, buf, n + 1);
+    for (int i = 0; i < 2; i++) {
+        char plain[96], mem[128];
+        snprintf(plain, sizeof plain, "%s/>", banks[i]);
+        snprintf(mem, sizeof mem, "%s Mode=\"memory\"/>", banks[i]);
+        if (on) replace_all(buf, sizeof buf, plain, mem);
+        else replace_all(buf, sizeof buf, mem, plain);
+    }
+    if (!strcmp(before, buf)) return;
+    if (on && GetFileAttributesW(bak) == INVALID_FILE_ATTRIBUTES) CopyFileW(path, bak, TRUE);
+    f = _wfopen(path, L"wb");
+    if (f) { fwrite(buf, 1, strlen(buf), f); fclose(f); }
+}
+
 /* ---------------- run the game ---------------- */
 static int run_game(void)
 {
     apply_video_options();
+    apply_preload();
     wchar_t exe[MAX_PATH], cmd[MAX_PATH + 16];
     swprintf(exe, MAX_PATH, L"%ls\\Fable3.exe", g_dir);
     for (;;) {
@@ -127,8 +172,8 @@ static int run_game(void)
 }
 
 /* ---------------- options / co-op window ---------------- */
-enum { ID_NAME = 100, ID_MODE, ID_RES, ID_VSYNC, ID_JOINIP, ID_PLAY, ID_HOST, ID_JOIN, ID_SAVE, ID_PORT, ID_SKIP };
-static HWND g_wnd, g_name, g_modeb, g_res, g_vsync, g_ip, g_port, g_skip;
+enum { ID_NAME = 100, ID_MODE, ID_RES, ID_VSYNC, ID_JOINIP, ID_PLAY, ID_HOST, ID_JOIN, ID_SAVE, ID_PORT, ID_SKIP, ID_PRELOAD };
+static HWND g_wnd, g_name, g_modeb, g_res, g_vsync, g_ip, g_port, g_skip, g_preload;
 static HFONT g_font;
 static int g_action;   /* 0 close, 1 play, 2 host, 3 join */
 
@@ -149,6 +194,7 @@ static void save_options(void)
     GetWindowTextW(g_res, b, 128); ini_set(L"Display", L"Resolution", b[0] ? b : L"auto");
     ini_set(L"Display", L"VSync", SendMessageW(g_vsync, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
     ini_set(L"Game", L"SkipIntro", SendMessageW(g_skip, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
+    ini_set(L"Game", L"PreloadGlobals", SendMessageW(g_preload, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
     GetWindowTextW(g_ip, b, 128); ini_set(L"Coop", L"LastJoinIP", b);
     GetWindowTextW(g_port, b, 128); ini_set(L"Network", L"Port", b);
 }
@@ -185,7 +231,7 @@ static int options_window(void)
                      .hbrBackground = GetSysColorBrush(COLOR_WINDOW), .hCursor = LoadCursorW(NULL, IDC_ARROW),
                      .hIcon = LoadIconW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1)) };
     RegisterClassW(&wc);
-    RECT r = { 0, 0, 440, 400 };
+    RECT r = { 0, 0, 440, 424 };
     AdjustWindowRect(&r, WS_CAPTION | WS_SYSMENU, FALSE);
     g_wnd = CreateWindowW(L"F3RLauncher", L"Fable III Restored", WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
                           CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, wc.hInstance, NULL);
@@ -210,7 +256,11 @@ static int options_window(void)
     SendMessageW(g_vsync, BM_SETCHECK, ini_int(L"Display", L"VSync", 1) ? BST_CHECKED : BST_UNCHECKED, 0);
     g_skip = add(L"BUTTON", L"Skip intro logos", BS_AUTOCHECKBOX, 230, y, 180, 20, ID_SKIP);
     SendMessageW(g_skip, BM_SETCHECK, ini_int(L"Game", L"SkipIntro", 1) ? BST_CHECKED : BST_UNCHECKED, 0);
-    y += 36;
+    y += 24;
+    g_preload = add(L"BUTTON", L"Preload world textures into memory (hard-drive PCs: less stutter, slow first load)",
+                    BS_AUTOCHECKBOX, 16, y, 410, 20, ID_PRELOAD);
+    SendMessageW(g_preload, BM_SETCHECK, ini_int(L"Game", L"PreloadGlobals", 0) ? BST_CHECKED : BST_UNCHECKED, 0);
+    y += 34;
 
     add(L"STATIC", L"Online co-op", 0, 16, y, 200, 18, 0); y += 20;
     add(L"STATIC", L"Host: start with \"Host co-op\", then open your world to co-op in game.\r\n"
