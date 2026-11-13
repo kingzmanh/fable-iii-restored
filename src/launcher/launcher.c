@@ -202,8 +202,10 @@ static int ensure_licenses(void)
         if (h == INVALID_HANDLE_VALUE) continue;
         do {
             if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !is_hex16(fd.cFileName)) continue;
-            /* real LIVE profiles start with 0009; skip our own offline id and other fake ids */
-            if (_wcsnicmp(fd.cFileName, L"0009", 4) || !_wcsicmp(fd.cFileName, ours)) continue;
+            /* every profile folder gets a license (extra copies are harmless); skip only our own
+             * normal-mode id and the well-known fake ids of old GFWL removers */
+            if (!_wcsicmp(fd.cFileName, ours) || !_wcsicmp(fd.cFileName, L"1122334400000000") ||
+                !_wcsicmp(fd.cFileName, L"FFFFFFFFFFFFFFFF")) continue;
             swprintf(lic, MAX_PATH, L"%ls\\" TK_DIR L"\\%ls.LIC", g_dir, fd.cFileName);
             if (GetFileAttributesW(lic) == INVALID_FILE_ATTRIBUTES && CopyFileW(tpl, lic, TRUE)) added++;
         } while (FindNextFileW(h, &fd));
