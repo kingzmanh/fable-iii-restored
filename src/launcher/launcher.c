@@ -2,6 +2,8 @@
  *   FableLauncher.exe              start the game
  *   FableLauncher.exe --options    options + co-op window (Start menu "Fable III Restored - Options & Co-op")
  *   FableLauncher.exe --host       start the game as co-op host
+ *   FableLauncher.exe --xboxlive   start in Xbox Live mode (Microsoft's GFWL; set up by the installer)
+ *   FableLauncher.exe --normal     start in normal mode even if Xbox Live mode is the default
  *   FableLauncher.exe --join <ip>  start the game and join the host at <ip>
  * Holding Shift while starting also opens the options window.
  * Settings live in Fable3Restored.ini next to the game; the game's own video file is
@@ -17,6 +19,8 @@
 #include <shellapi.h>
 #include <stdio.h>
 #include <wchar.h>
+#include <wctype.h>
+#include "../common/identity.h"
 
 static wchar_t g_dir[MAX_PATH], g_ini[MAX_PATH];
 
@@ -64,6 +68,7 @@ static void xml_set(char *xml, size_t cap, const char *tag, const char *val)
     memcpy(v, val, nl);
 }
 
+static int g_xbl_run;   /* Xbox Live mode: our dll is not loaded, so "borderless" becomes fullscreen */
 static void apply_video_options(void)
 {
     wchar_t mode[32], res[32];
@@ -97,7 +102,7 @@ static void apply_video_options(void)
     snprintf(v, sizeof v, "%d", w); xml_set(xml, sizeof xml, "ScreenResolutionX", v);
     snprintf(v, sizeof v, "%d", h); xml_set(xml, sizeof xml, "ScreenResolutionY", v);
     /* borderless and windowed both run the game windowed; our xlive.dll restyles the window */
-    xml_set(xml, sizeof xml, "Fullscreen", _wcsicmp(mode, L"fullscreen") == 0 ? "True" : "False");
+    xml_set(xml, sizeof xml, "Fullscreen", (_wcsicmp(mode, L"fullscreen") == 0 || (g_xbl_run && _wcsicmp(mode, L"windowed"))) ? "True" : "False");
     f = _wfopen(path, L"wb");
     if (f) { fwrite(xml, 1, strlen(xml), f); fclose(f); }
 }
@@ -147,8 +152,120 @@ static void apply_preload(void)
 }
 
 /* ---------------- run the game ---------------- */
+/* ---------------- Xbox Live mode (Microsoft's GFWL, set up by the installer) ----------------
+ * Our xlive.dll is set aside (xlive.dll.normal-mode) so the game loads Microsoft's GFWL, the
+ * three exes get Windows 7 compatibility + admin (as the Steam guides say), and the game is
+ * started through the original SecuROM launcher. Normal mode undoes all of it. */
+#define TK_DIR L"XboxLiveMode\\D7FCB87DC6790538CC5EE45EC44EC782603B8ACB"
+static const wchar_t *k_layer_exes[3] = { L"FableLauncher_original.exe", L"F3Secu.exe", L"Fable3.exe" };
+
+static void set_layers(int on)
+{
+    HKEY k;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers",
+                        0, NULL, 0, KEY_WRITE, NULL, &k, NULL)) return;
+    for (int i = 0; i < 3; i++) {
+        wchar_t v[MAX_PATH];
+        swprintf(v, MAX_PATH, L"%ls\\%ls", g_dir, k_layer_exes[i]);
+        if (on) RegSetValueExW(k, v, 0, REG_SZ, (const BYTE *)L"~ RUNASADMIN WIN7RTM", sizeof L"~ RUNASADMIN WIN7RTM");
+        else RegDeleteValueW(k, v);
+    }
+    RegCloseKey(k);
+}
+
+static int is_hex16(const wchar_t *s)
+{
+    if (wcslen(s) != 16) return 0;
+    for (int i = 0; i < 16; i++) if (!iswxdigit(s[i])) return 0;
+    return 1;
+}
+
+/* give every Xbox profile on this PC the Traitor's Keep license (the guide's rename step).
+ * GFWL keeps profiles in %LOCALAPPDATA%\Microsoft\Xlive\Content\<XUID>; the game also makes
+ * a save folder named after the XUID. Returns how many licenses were added. */
+static int ensure_licenses(void)
+{
+    wchar_t tpl[MAX_PATH], pat[MAX_PATH], lic[MAX_PATH], *la = NULL, *sg = NULL;
+    swprintf(tpl, MAX_PATH, L"%ls\\" TK_DIR L"\\license_template.lic", g_dir);
+    if (GetFileAttributesW(tpl) == INVALID_FILE_ATTRIBUTES) return 0;
+    int added = 0;
+    wchar_t roots[2][MAX_PATH] = { L"", L"" };
+    if (SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, NULL, &la) == S_OK) { swprintf(roots[0], MAX_PATH, L"%ls\\Microsoft\\Xlive\\Content", la); CoTaskMemFree(la); }
+    if (SHGetKnownFolderPath(&FOLDERID_SavedGames, 0, NULL, &sg) == S_OK) { swprintf(roots[1], MAX_PATH, L"%ls\\Lionhead Studios\\Fable 3", sg); CoTaskMemFree(sg); }
+    wchar_t ours[17];
+    swprintf(ours, 17, L"%016llX", (unsigned long long)f3r_default_xuid());
+    for (int r = 0; r < 2; r++) {
+        if (!roots[r][0]) continue;
+        swprintf(pat, MAX_PATH, L"%ls\\*", roots[r]);
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW(pat, &fd);
+        if (h == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !is_hex16(fd.cFileName)) continue;
+            /* real LIVE profiles start with 0009; skip our own offline id and other fake ids */
+            if (_wcsnicmp(fd.cFileName, L"0009", 4) || !_wcsicmp(fd.cFileName, ours)) continue;
+            swprintf(lic, MAX_PATH, L"%ls\\" TK_DIR L"\\%ls.LIC", g_dir, fd.cFileName);
+            if (GetFileAttributesW(lic) == INVALID_FILE_ATTRIBUTES && CopyFileW(tpl, lic, TRUE)) added++;
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    return added;
+}
+
+static int dll_aside(int aside)
+{
+    wchar_t ours[MAX_PATH], off[MAX_PATH];
+    swprintf(ours, MAX_PATH, L"%ls\\xlive.dll", g_dir);
+    swprintf(off, MAX_PATH, L"%ls\\xlive.dll.normal-mode", g_dir);
+    if (aside) {
+        if (GetFileAttributesW(ours) == INVALID_FILE_ATTRIBUTES) return 1;
+        DeleteFileW(off);
+        return MoveFileW(ours, off);
+    }
+    if (GetFileAttributesW(off) != INVALID_FILE_ATTRIBUTES && GetFileAttributesW(ours) == INVALID_FILE_ATTRIBUTES) return MoveFileW(off, ours);
+    return 1;
+}
+
+/* normal mode: our dll in place, no compatibility shims */
+static void normal_mode_prepare(void)
+{
+    dll_aside(0);
+    set_layers(0);
+}
+
+static int run_xboxlive(void)
+{
+    if (!ini_int(L"XboxLive", L"Available", 0)) {
+        MessageBoxW(NULL, L"Xbox Live mode is not set up.\n\nRun Fable3Restored-Setup.exe again and tick \"Also set up Xbox Live mode\".",
+                    L"Fable III Restored", MB_ICONINFORMATION);
+        return 1;
+    }
+    if (!dll_aside(1)) {
+        MessageBoxW(NULL, L"Could not switch to Xbox Live mode (xlive.dll is in use or the folder is read-only).", L"Fable III Restored", MB_ICONERROR);
+        return 1;
+    }
+    set_layers(1);
+    ensure_licenses();
+    g_xbl_run = 1;
+    apply_video_options();
+    wchar_t exe[MAX_PATH];
+    swprintf(exe, MAX_PATH, L"%ls\\FableLauncher_original.exe", g_dir);
+    SHELLEXECUTEINFOW se = { .cbSize = sizeof se, .fMask = SEE_MASK_NOCLOSEPROCESS, .lpFile = exe, .lpDirectory = g_dir, .nShow = SW_SHOWNORMAL };
+    int ok = ShellExecuteExW(&se) && se.hProcess;
+    if (ok) { WaitForSingleObject(se.hProcess, INFINITE); CloseHandle(se.hProcess); }
+    /* a first sign-in creates the Xbox profile: license it now for the next start */
+    int added = ensure_licenses();
+    normal_mode_prepare();
+    if (!ok) { MessageBoxW(NULL, L"Could not start the original Fable III launcher.", L"Fable III Restored", MB_ICONERROR); return 1; }
+    if (added)
+        MessageBoxW(NULL, L"Your Xbox profile was found and now has the DLC licenses.\n\nStart Fable III in Xbox Live mode again to play with all DLC.",
+                    L"Fable III Restored - Xbox Live mode", MB_ICONINFORMATION);
+    return 0;
+}
+
 static int run_game(void)
 {
+    normal_mode_prepare();
     apply_video_options();
     apply_preload();
     wchar_t exe[MAX_PATH], cmd[MAX_PATH + 16];
@@ -172,8 +289,8 @@ static int run_game(void)
 }
 
 /* ---------------- options / co-op window ---------------- */
-enum { ID_NAME = 100, ID_MODE, ID_RES, ID_VSYNC, ID_JOINIP, ID_PLAY, ID_HOST, ID_JOIN, ID_SAVE, ID_PORT, ID_SKIP, ID_PRELOAD };
-static HWND g_wnd, g_name, g_modeb, g_res, g_vsync, g_ip, g_port, g_skip, g_preload;
+enum { ID_NAME = 100, ID_MODE, ID_RES, ID_VSYNC, ID_JOINIP, ID_PLAY, ID_HOST, ID_JOIN, ID_SAVE, ID_PORT, ID_SKIP, ID_PRELOAD, ID_XBL };
+static HWND g_wnd, g_name, g_modeb, g_res, g_vsync, g_ip, g_port, g_skip, g_preload, g_xbl;
 static HFONT g_font;
 static int g_action;   /* 0 close, 1 play, 2 host, 3 join */
 
@@ -195,6 +312,7 @@ static void save_options(void)
     ini_set(L"Display", L"VSync", SendMessageW(g_vsync, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
     ini_set(L"Game", L"SkipIntro", SendMessageW(g_skip, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
     ini_set(L"Game", L"PreloadGlobals", SendMessageW(g_preload, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
+    ini_set(L"XboxLive", L"Mode", SendMessageW(g_xbl, BM_GETCHECK, 0, 0) == BST_CHECKED ? L"1" : L"0");
     GetWindowTextW(g_ip, b, 128); ini_set(L"Coop", L"LastJoinIP", b);
     GetWindowTextW(g_port, b, 128); ini_set(L"Network", L"Port", b);
 }
@@ -231,7 +349,7 @@ static int options_window(void)
                      .hbrBackground = GetSysColorBrush(COLOR_WINDOW), .hCursor = LoadCursorW(NULL, IDC_ARROW),
                      .hIcon = LoadIconW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1)) };
     RegisterClassW(&wc);
-    RECT r = { 0, 0, 440, 424 };
+    RECT r = { 0, 0, 440, 448 };
     AdjustWindowRect(&r, WS_CAPTION | WS_SYSMENU, FALSE);
     g_wnd = CreateWindowW(L"F3RLauncher", L"Fable III Restored", WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
                           CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, wc.hInstance, NULL);
@@ -260,6 +378,13 @@ static int options_window(void)
     g_preload = add(L"BUTTON", L"Preload world textures into memory (hard-drive PCs: less stutter, slow first load)",
                     BS_AUTOCHECKBOX, 16, y, 410, 20, ID_PRELOAD);
     SendMessageW(g_preload, BM_SETCHECK, ini_int(L"Game", L"PreloadGlobals", 0) ? BST_CHECKED : BST_UNCHECKED, 0);
+    y += 24;
+    g_xbl = add(L"BUTTON", ini_int(L"XboxLive", L"Available", 0)
+                    ? L"Play uses Xbox Live mode (Microsoft's online co-op, Xbox account needed)"
+                    : L"Xbox Live mode (not set up - tick it in the installer)",
+                BS_AUTOCHECKBOX, 16, y, 410, 20, ID_XBL);
+    SendMessageW(g_xbl, BM_SETCHECK, ini_int(L"XboxLive", L"Mode", 0) ? BST_CHECKED : BST_UNCHECKED, 0);
+    EnableWindow(g_xbl, ini_int(L"XboxLive", L"Available", 0));
     y += 34;
 
     add(L"STATIC", L"Online co-op", 0, 16, y, 200, 18, 0); y += 20;
@@ -301,11 +426,15 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE hp, LPWSTR cmdline, int show)
     for (int i = 1; i < argc; i++) {
         if (!_wcsicmp(argv[i], L"--options")) action = 0;
         else if (!_wcsicmp(argv[i], L"--host")) action = 2;
+        else if (!_wcsicmp(argv[i], L"--xboxlive")) action = 4;
+        else if (!_wcsicmp(argv[i], L"--normal")) action = 5;
         else if (!_wcsicmp(argv[i], L"--join") && i + 1 < argc) { action = 3; join = argv[++i]; }
     }
     (void)cmdline;
     if (action == 0 || (GetAsyncKeyState(VK_SHIFT) & 0x8000)) action = options_window();
     if (action == 0) return 0;
+    if (action == 4 || (action == 1 && ini_int(L"XboxLive", L"Mode", 0))) return run_xboxlive();
+    if (action == 5) action = 1;
 
     /* co-op mode for this session only */
     if (action == 3) {

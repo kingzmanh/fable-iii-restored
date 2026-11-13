@@ -22,6 +22,7 @@
 #include <wchar.h>
 #include "../common/identity.h"
 #include "nvidia.h"
+#include "xboxlive.h"
 
 #define APP_NAME L"Fable III Restored"
 #define APP_VER  L"1.0.0"
@@ -43,7 +44,8 @@ static const dlc_t k_dlc[3] = {
 };
 static const wchar_t *k_known_exe_sha = L"aac98798e77ca32282d663af54fc185c3b5256b5317ed8568d7f12a0ef42da42";
 
-static HWND g_wnd, g_dir_edit, g_found, g_cb_dlc, g_cb_desk, g_cb_saves, g_prog, g_status, g_btn, g_browse;
+static HWND g_wnd, g_dir_edit, g_found, g_cb_dlc, g_cb_desk, g_cb_saves, g_cb_xbl, g_prog, g_status, g_btn, g_browse;
+static int g_xboxlive;   /* --silent ... --xboxlive */
 static HFONT g_font, g_big;
 static wchar_t g_dir[MAX_PATH];
 static volatile LONG g_busy;
@@ -245,6 +247,21 @@ static int dlc_installed(const dlc_t *d)
     wchar_t m[MAX_PATH];
     swprintf(m, MAX_PATH, L"%ls\\DLC\\%ls\\installed.txt", g_dir, d->id);
     return file_exists(m);
+}
+
+/* downloads for Xbox Live mode: same downloader, then the SHA-256 check */
+static int xbl_download(const xbl_file_t *f, const wchar_t *dst)
+{
+    dlc_t d = { f->name, L"", f->url, f->sha, f->size };
+    wchar_t sha[65];
+    if (file_exists(dst) && sha256_file(dst, sha, NULL) && !wcscmp(sha, f->sha)) return 1;
+    status(L"Downloading %ls...", f->name);
+    g_total_bytes = f->size; g_done_bytes = 0;
+    int ok = 0;
+    for (int attempt = 0; attempt < 4 && !ok; attempt++) ok = download(&d, dst);
+    if (!ok) { status(L"ERROR: could not download %ls", f->name); return 0; }
+    if (!sha256_file(dst, sha, NULL) || wcscmp(sha, f->sha)) { DeleteFileW(dst); status(L"ERROR: %ls download is damaged", f->name); return 0; }
+    return 1;
 }
 
 static int install_dlc(void)
@@ -513,6 +530,18 @@ dlc:
     if (g_silent || SendMessageW(g_cb_dlc, BM_GETCHECK, 0, 0) == BST_CHECKED) {
         if (!install_dlc()) return 0;
     }
+    /* 5. optional Xbox Live mode (Microsoft's GFWL, online co-op with an Xbox account) */
+    if (g_xboxlive || SendMessageW(g_cb_xbl, BM_GETCHECK, 0, 0) == BST_CHECKED) {
+        if (!xbl_setup(g_dir, xbl_download, status)) return 0;
+        if (GetEnvironmentVariableW(L"F3R_TEST", NULL, 0) == 0) {
+            wchar_t sm[MAX_PATH], lnk[MAX_PATH], launcher[MAX_PATH], gameexe[MAX_PATH];
+            start_menu_dir(sm);
+            swprintf(launcher, MAX_PATH, L"%ls\\FableLauncher.exe", g_dir);
+            swprintf(gameexe, MAX_PATH, L"%ls\\Fable3.exe", g_dir);
+            swprintf(lnk, MAX_PATH, L"%ls\\Fable III (Xbox Live mode).lnk", sm);
+            shortcut(lnk, launcher, L"--xboxlive", gameexe, L"Play Fable III with Microsoft's Games for Windows LIVE (online co-op)");
+        }
+    }
     progress(1000);
     return 1;
 }
@@ -543,8 +572,9 @@ static int uninstall(void)
     }
     wchar_t sm[MAX_PATH], lnk[MAX_PATH];
     start_menu_dir(sm);
-    const wchar_t *names[] = { L"Fable III.lnk", L"Options and Co-op.lnk", L"Uninstall Fable III Restored.lnk" };
-    for (int i = 0; i < 3; i++) { swprintf(lnk, MAX_PATH, L"%ls\\%ls", sm, names[i]); DeleteFileW(lnk); }
+    const wchar_t *names[] = { L"Fable III.lnk", L"Options and Co-op.lnk", L"Uninstall Fable III Restored.lnk", L"Fable III (Xbox Live mode).lnk" };
+    xbl_remove(g_dir);
+    for (int i = 0; i < 4; i++) { swprintf(lnk, MAX_PATH, L"%ls\\%ls", sm, names[i]); DeleteFileW(lnk); }
     RemoveDirectoryW(sm);
     desktop_link(lnk); DeleteFileW(lnk);
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, UNINST_KEY);
@@ -622,7 +652,12 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             if (!is_game_dir(g_dir)) return 0;
             InterlockedExchange(&g_busy, 1);
             EnableWindow(g_btn, FALSE); EnableWindow(g_browse, FALSE); EnableWindow(g_dir_edit, FALSE);
-            EnableWindow(g_cb_dlc, FALSE); EnableWindow(g_cb_desk, FALSE); EnableWindow(g_cb_saves, FALSE);
+            if (SendMessageW(g_cb_xbl, BM_GETCHECK, 0, 0) == BST_CHECKED && SendMessageW(g_cb_dlc, BM_GETCHECK, 0, 0) != BST_CHECKED) {
+                wchar_t chk[MAX_PATH];
+                swprintf(chk, MAX_PATH, L"%ls\\DLC\\D7FCB87DC6790538CC5EE45EC44EC782603B8ACB\\installed.txt", g_dir);
+                if (!file_exists(chk)) { MessageBoxW(h, L"Xbox Live mode needs the DLC too - please keep the DLC box ticked.", APP_NAME, MB_ICONINFORMATION); return 0; }
+            }
+            EnableWindow(g_cb_dlc, FALSE); EnableWindow(g_cb_desk, FALSE); EnableWindow(g_cb_saves, FALSE); EnableWindow(g_cb_xbl, FALSE);
             CloseHandle(CreateThread(NULL, 0, worker, NULL, 0, NULL));
         }
         return 0;
@@ -678,6 +713,13 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE hp, LPWSTR cl, int show)
         if (f) { fwprintf(f, L"%d %ls\n", ok, m); fclose(f); }
         return ok ? 0 : 1;
     }
+    if (argc >= 3 && !_wcsicmp(argv[1], L"--xbl-dlc-test")) {   /* tests: only the Xbox Live mode DLC folder */
+        lstrcpynW(g_dir, argv[2], MAX_PATH);
+        g_silent = 1;
+        int ok = xbl_prepare_dlc(g_dir, xbl_download, status);
+        save_log(ok);
+        return ok ? 0 : 1;
+    }
     if (argc >= 3 && !_wcsicmp(argv[1], L"--uninstall-silent")) {   /* tests: no questions, DLC kept */
         lstrcpynW(g_dir, argv[2], MAX_PATH);
         g_silent = g_quiet_uninstall = 1;
@@ -688,6 +730,7 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE hp, LPWSTR cl, int show)
         freopen("CONOUT$", "w", stdout);
         lstrcpynW(g_dir, argv[2], MAX_PATH);
         g_silent = 1;
+        g_xboxlive = argc >= 4 && !_wcsicmp(argv[3], L"--xboxlive");
         int ok = install();
         wprintf(L"%ls\n", ok ? L"INSTALL OK" : L"INSTALL FAILED");
         return ok ? 0 : 1;
@@ -704,7 +747,7 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE hp, LPWSTR cl, int show)
     WNDCLASSW wc = { .lpfnWndProc = wndproc, .hInstance = hi, .lpszClassName = L"F3RSetup", .hbrBackground = GetSysColorBrush(COLOR_WINDOW),
                      .hCursor = LoadCursorW(NULL, IDC_ARROW), .hIcon = LoadIconW(hi, MAKEINTRESOURCEW(1)) };
     RegisterClassW(&wc);
-    RECT r = { 0, 0, 560, 430 };
+    RECT r = { 0, 0, 560, 464 };
     AdjustWindowRect(&r, WS_CAPTION | WS_SYSMENU, FALSE);
     int offscreen = GetEnvironmentVariableW(L"F3R_TEST", NULL, 0) > 0;   /* automated UI tests */
     g_wnd = CreateWindowExW(offscreen ? WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE : 0, L"F3RSetup", APP_NAME L" " APP_VER L" Setup",
@@ -730,10 +773,12 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE hp, LPWSTR cl, int show)
     SendMessageW(g_cb_saves, BM_SETCHECK, BST_CHECKED, 0);
     g_cb_desk = add(L"BUTTON", L"Desktop shortcut", BS_AUTOCHECKBOX, 20, 258, 520, 20, 0, g_font);
     SendMessageW(g_cb_desk, BM_SETCHECK, BST_CHECKED, 0);
-    g_prog = add(PROGRESS_CLASSW, L"", 0, 20, 296, 520, 18, 0, g_font);
+    g_cb_xbl = add(L"BUTTON", L"Also set up Xbox Live mode: Microsoft's own online co-op with your Xbox account\r\n"
+                              L"(optional; installs Games for Windows LIVE 3.5.92 from Microsoft)", BS_AUTOCHECKBOX | BS_MULTILINE, 20, 282, 520, 36, 0, g_font);
+    g_prog = add(PROGRESS_CLASSW, L"", 0, 20, 330, 520, 18, 0, g_font);
     SendMessageW(g_prog, PBM_SETRANGE32, 0, 1000);
-    g_status = add(L"STATIC", L"Ready.", 0, 20, 320, 520, 48, 0, g_font);
-    g_btn = add(L"BUTTON", L"Install", BS_DEFPUSHBUTTON, 440, 380, 100, 32, 12, g_font);
+    g_status = add(L"STATIC", L"Ready.", 0, 20, 354, 520, 48, 0, g_font);
+    g_btn = add(L"BUTTON", L"Install", BS_DEFPUSHBUTTON, 440, 414, 100, 32, 12, g_font);
     update_found();
     ShowWindow(g_wnd, offscreen ? SW_SHOWNOACTIVATE : SW_SHOW);
     MSG m;

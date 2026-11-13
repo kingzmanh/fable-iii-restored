@@ -22,6 +22,22 @@ You need your own copy of Fable III (Steam). No game files are included.
 
 Uninstall from Windows *Apps & features* or the Start menu. Your original files are put back.
 
+## Xbox Live mode (optional)
+
+If you want Fable III's original online co-op through Microsoft (orbs, invites, your Xbox friends), tick **"Also set up Xbox Live mode"** in the installer. It does the Steam-guide steps automatically:
+
+- installs Games for Windows LIVE 3.5.92 and Marketplace 3.5.67 from Microsoft's own download server, removing older versions first
+- builds the merged DLC folder GFWL expects (hard links, no extra space) and adds the Traitor's Keep license files
+
+Start **Fable III (Xbox Live mode)** from the Start menu, or pick it in Options. The launcher then sets our `xlive.dll` aside, turns on Windows 7 compatibility and admin for the game, and starts the original launcher.
+
+You still do two things yourself, once:
+
+1. Click through the SecuROM activation wizard.
+2. Sign in with your Xbox account in the game (press **Home**).
+
+After the first sign-in, the launcher gives your profile the DLC license, so restart once. Normal mode always switches everything back.
+
 ## Options and co-op
 
 Start menu → **Fable III Restored → Options and Co-op**, or hold **Shift** while starting the game.

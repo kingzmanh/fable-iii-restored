@@ -15,7 +15,7 @@ gcc $CFLAGS -municode -mwindows -o build/FableLauncher.exe src/launcher/launcher
 strip build/FableLauncher.exe
 
 windres -O coff -i src/installer/setup.rc -o build/setup_res.o
-gcc $CFLAGS -municode -mwindows -o build/Fable3Restored-Setup.exe src/installer/setup.c src/installer/nvidia.c build/setup_res.o     -lcomctl32 -lshell32 -lole32 -luuid -lwininet -lsetupapi -lbcrypt -ladvapi32
+gcc $CFLAGS -municode -mwindows -o build/Fable3Restored-Setup.exe src/installer/setup.c src/installer/nvidia.c src/installer/xboxlive.c build/setup_res.o     -lcomctl32 -lshell32 -lole32 -luuid -lwininet -lsetupapi -lbcrypt -ladvapi32
 strip build/Fable3Restored-Setup.exe
 
 if [ "$1" = "install" ]; then
