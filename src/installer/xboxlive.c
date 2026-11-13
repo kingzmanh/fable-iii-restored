@@ -74,20 +74,12 @@ static const xbl_file_t k_lics = {
     L"Traitor's Keep license files", L"https://drive.usercontent.google.com/download?id=181cFXO8aoUGh4lmDzu_ExG_7e1RMY8tU&export=download",
     L"b954f0bb8e97451c4185aadc6d0df2f559eb06a044b2a05c30f37b6933f28c85", 1042ULL, L"tk_lics.zip" };
 
-/* version "3.5.88.0" < "3.5.92.0" */
-static int ver_less(const wchar_t *a, const wchar_t *b)
+/* Uninstall every installed copy of an MSI product by its display name (both registry views),
+ * whatever its version - the guide's "uninstall both" step, which also repairs a broken GFWL. */
+static void gfwl_remove_all(const wchar_t *name, xbl_status_fn st)
 {
-    int x[4] = { 0 }, y[4] = { 0 };
-    swscanf(a, L"%d.%d.%d.%d", &x[0], &x[1], &x[2], &x[3]);
-    swscanf(b, L"%d.%d.%d.%d", &y[0], &y[1], &y[2], &y[3]);
-    for (int i = 0; i < 4; i++) if (x[i] != y[i]) return x[i] < y[i];
-    return 0;
-}
-
-/* installed version of an MSI product by display name (both registry views); remove older ones */
-static int gfwl_check(const wchar_t *name, const wchar_t *want, xbl_status_fn st)
-{
-    int have_current = 0;
+    wchar_t codes[8][64], vers[8][64];
+    int n_codes = 0;
     REGSAM views[2] = { KEY_WOW64_32KEY, KEY_WOW64_64KEY };
     for (int v = 0; v < 2; v++) {
         HKEY root;
@@ -99,19 +91,22 @@ static int gfwl_check(const wchar_t *name, const wchar_t *want, xbl_status_fn st
             cb = sizeof dn; RegQueryValueExW(k, L"DisplayName", NULL, NULL, (BYTE *)dn, &cb);
             cb = sizeof dv; RegQueryValueExW(k, L"DisplayVersion", NULL, NULL, (BYTE *)dv, &cb);
             RegCloseKey(k);
-            if (wcscmp(dn, name)) continue;
-            if (ver_less(dv, want) && sub[0] == L'{') {
-                wchar_t args[300];
-                swprintf(args, 300, L"/x %ls /qn /norestart", sub);
-                st(L"Removing old %ls %ls...", name, dv);
-                run_wait(L"msiexec.exe", args);
-            } else {
-                have_current = 1;
-            }
+            if (wcscmp(dn, name) || sub[0] != L'{' || n_codes >= 8) continue;
+            int dup = 0;
+            for (int j = 0; j < n_codes; j++) if (!_wcsicmp(codes[j], sub)) dup = 1;
+            if (dup) continue;
+            lstrcpynW(codes[n_codes], sub, 64);
+            lstrcpynW(vers[n_codes], dv, 64);
+            n_codes++;
         }
         RegCloseKey(root);
     }
-    return have_current;
+    for (int j = 0; j < n_codes; j++) {
+        wchar_t args[300];
+        swprintf(args, 300, L"/x %ls /qn /norestart", codes[j]);
+        st(L"Uninstalling %ls %ls...", name, vers[j]);
+        run_wait(L"msiexec.exe", args);
+    }
 }
 
 /* ---- merged DLC folder ---- */
@@ -234,17 +229,20 @@ int xbl_prepare_dlc(const wchar_t *game, xbl_download_fn dl, xbl_status_fn st)
 
 int xbl_setup(const wchar_t *game, xbl_download_fn dl, xbl_status_fn st)
 {
-    wchar_t tmp[MAX_PATH], f[MAX_PATH], dir[MAX_PATH];
+    wchar_t tmp[MAX_PATH], f[MAX_PATH];
     GetTempPathW(MAX_PATH, tmp);
     wcscat(tmp, L"Fable3Restored");
     SHCreateDirectoryExW(NULL, tmp, NULL);
-    /* 1. GFWL */
+    /* 1. GFWL, exactly like the guide: download the new one first, uninstall both old
+     *    programs (any version), then install the new ones */
     static const wchar_t *names[2] = { L"Microsoft Games for Windows - LIVE Redistributable", L"Microsoft Games for Windows Marketplace" };
-    static const wchar_t *vers[2] = { L"3.5.92.0", L"3.5.67.0" };
     for (int i = 0; i < 2; i++) {
-        if (gfwl_check(names[i], vers[i], st)) { st(L"%ls: up to date", k_msi[i].name); continue; }
         swprintf(f, MAX_PATH, L"%ls\\%ls", tmp, k_msi[i].file);
         if (!dl(&k_msi[i], f)) return 0;
+    }
+    for (int i = 0; i < 2; i++) gfwl_remove_all(names[i], st);
+    for (int i = 0; i < 2; i++) {
+        swprintf(f, MAX_PATH, L"%ls\\%ls", tmp, k_msi[i].file);
         st(L"Installing %ls...", k_msi[i].name);
         wchar_t args[MAX_PATH + 40];
         swprintf(args, MAX_PATH + 40, L"/i \"%ls\" /qn /norestart", f);
