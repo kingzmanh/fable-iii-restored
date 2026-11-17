@@ -8,10 +8,14 @@ Makes the PC version of **Fable III** (Steam, 2011) run again on Windows 10 and 
 - **No SecuROM activation wizard.** The game starts straight from Steam's Play button, the desktop shortcut, or by double-clicking `Fable3.exe`.
 - **All DLC, unlocked.** The installer downloads Microsoft's original Fable III PC DLC from Microsoft's own download server (Traitor's Keep, Understone, Inquisitor, the outfits, weapons, tattoos, potions and dog packs), checks it and installs it. No license files, no editing game data.
 - **Saves that don't break.** Saves and in-game settings (controls, audio, misc) are kept as normal files, not tied to a LIVE profile.
-- **Online co-op without Microsoft.** Host or join by IP, or find a host on your LAN. (New: not yet tested between two PCs.)
+- **Online co-op without Microsoft.** Host or join by IP, or find a host on your LAN.
+- **Optional Xbox Live mode.** Microsoft's own online co-op with your Xbox account, set up automatically.
 - **Display fixes.** Borderless window at your desktop resolution (including ultrawide), the Nvidia VSync/triple-buffering FPS fix, an optional frame cap, and no "Direct3D failed to initialise" crash when another program holds the screen.
+- **Skips the intro logos.** Optional preload of the world textures for hard-drive PCs.
 
 You need your own copy of Fable III (Steam). No game files are included.
+
+> **Disclaimer:** the online features (our own co-op and Xbox Live mode) have not been tested yet.
 
 ## Install
 

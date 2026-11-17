@@ -9,7 +9,7 @@ ROOT="$(pwd)"
 GAME="${FABLE3_DIR:-/e/SteamLibrary/steamapps/common/Fable 3}"
 OUT="$ROOT/work/test"
 TAPP="$ROOT/work/test_appdata"
-SAVES="/c/Users/Msi/Saved Games/Lionhead Studios/Fable 3"
+SAVES="$(cygpath -u "$USERPROFILE")/Saved Games/Lionhead Studios/Fable 3"
 rm -rf "$OUT"; mkdir -p "$OUT" "$TAPP/Lionhead Studios/Fable 3"
 QUIT=${1:-30000}; SHOTS=${2:-}; KEYS=${3:-}
 cp build/xlive.dll "$GAME/xlive.dll"
