@@ -8,8 +8,8 @@ Makes the PC version of **Fable III** (Steam, 2011) run again on Windows 10 and 
 - **No SecuROM activation wizard.** The game starts straight from Steam's Play button, the desktop shortcut, or by double-clicking `Fable3.exe`.
 - **All DLC, unlocked.** The installer downloads Microsoft's original Fable III PC DLC from Microsoft's own download server (Traitor's Keep, Understone, Inquisitor, the outfits, weapons, tattoos, potions and dog packs), checks it and installs it. No license files, no editing game data.
 - **Saves that don't break.** Saves and in-game settings (controls, audio, misc) are kept as normal files, not tied to a LIVE profile.
-- **Online co-op without Microsoft.** Host or join by IP, or find a host on your LAN.
-- **Optional Xbox Live mode.** Microsoft's own online co-op with your Xbox account, set up automatically.
+- **Online co-op without Microsoft** [ need more testing ]. Host or join by IP, or find a host on your LAN.
+- **Optional Xbox Live mode** [ need more testing ]. Microsoft's own online co-op with your Xbox account, set up automatically.
 - **Display fixes.** Borderless window at your desktop resolution (including ultrawide), the Nvidia VSync/triple-buffering FPS fix, an optional frame cap, and no "Direct3D failed to initialise" crash when another program holds the screen.
 - **Skips the intro logos.** Optional preload of the world textures for hard-drive PCs.
 
@@ -26,7 +26,7 @@ You need your own copy of Fable III (Steam). No game files are included.
 
 Uninstall from Windows *Apps & features* or the Start menu. Your original files are put back.
 
-## Xbox Live mode (optional)
+## Xbox Live mode (optional) [ need more testing ]
 
 If you want Fable III's original online co-op through Microsoft (orbs, invites, your Xbox friends), tick **"Also set up Xbox Live mode"** in the installer. It does the Steam-guide steps automatically:
 
@@ -48,7 +48,7 @@ Start menu → **Fable III Restored → Options and Co-op**, or hold **Shift** w
 
 - **Hero name** shown to your co-op partner.
 - **Display:** borderless window, fullscreen or window. The resolution can be `auto` (your desktop) or any size, e.g. `3440x1440`.
-- **Co-op**
+- **Co-op** [ need more testing ]
   - The host clicks **Host co-op**, then opens their world to co-op in game.
   - The partner types the host's IP address and clicks **Join co-op**.
   - Over the internet, the host forwards UDP ports 3074 and 27421 on their router, or both players use a LAN/VPN such as ZeroTier or Radmin VPN.
